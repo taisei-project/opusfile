@@ -44,6 +44,9 @@ ifeq ($(findstring -DOP_HAVE_LRINTF,${CFLAGS}),-DOP_HAVE_LRINTF)
 LIBS := -lm $(LIBS)
 endif
 
+RANLIB ?= ranlib
+LIBS += -lwsock32 -lws2_32 -lgdi32 -lcrypt32
+
 #TODO: tests
 FOO_LIBS =
 
@@ -61,6 +64,7 @@ info.c \
 internal.c \
 opusfile.c \
 stream.c \
+wincerts.c \
 
 LIBOPUSFILE_CHEADERS = \
 internal.h \
@@ -127,6 +131,7 @@ all: ${ALL_TARGETS}
 ${LIBOPUSFILE_TARGET}: ${LIBOPUSFILE_OBJS}
 	mkdir -p ${TARGETLIBDIR}
 	$(AR) cqs $@ ${LIBOPUSFILE_OBJS}
+	$(RANLIB) $@
 
 # opusfile_example
 ${OPUSFILE_EXAMPLE_TARGET}: ${OPUSFILE_EXAMPLE_OBJS} ${LIBOPUSFILE_TARGET}
