@@ -9,6 +9,10 @@
  * by the Xiph.Org Foundation and contributors http://www.xiph.org/ *
  *                                                                  *
  ********************************************************************/
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include "internal.h"
 #include <ctype.h>
 #include <errno.h>
@@ -884,14 +888,8 @@ static void op_http_conn_close(OpusHTTPStream *_stream,OpusHTTPConn *_conn,
     However, we will not wait if this would block (it's not worth the savings
      from session resumption to do so).
     Clients (that's us) MAY resume a TLS session that ended with an incomplete
-     close, according to RFC 2818, so that's no reason to make sure the server
-     shut things down gracefully.
-    It also says "client implementations MUST treat any premature closes as
-     errors and the data received as potentially truncated," but libopusfile
-     treats errors and potentially truncated data in unseekable streams just
-     like a normal EOF.
-    We warn about this in the docs, and give some suggestions if you truly want
-     to avoid truncation attacks.*/
+     close, according to RFC 2818, so there's no reason to make sure the server
+     shut things down gracefully.*/
   if(_gracefully&&_conn->ssl_conn!=NULL)SSL_shutdown(_conn->ssl_conn);
   op_http_conn_clear(_conn);
   _conn->next_pos=-1;
@@ -1021,6 +1019,9 @@ static int op_http_conn_read(OpusHTTPConn *_conn,
   fd.fd=_conn->fd;
   ssl_conn=_conn->ssl_conn;
   nread=nread_unblocked=0;
+  /*RFC 2818 says "client implementations MUST treat any premature closes as
+     errors and the data received as potentially truncated," so we make very
+     sure to report read errors upwards.*/
   do{
     int err;
     if(ssl_conn!=NULL){
@@ -2036,15 +2037,15 @@ static char *op_base64_encode(char *_dst,const char *_src,int _len){
     s1=_src[3*i+1];
     s2=_src[3*i+2];
     _dst[4*i+0]=BASE64_TABLE[s0>>2];
-    _dst[4*i+1]=BASE64_TABLE[s0&3<<4|s1>>4];
-    _dst[4*i+2]=BASE64_TABLE[s1&15<<2|s2>>6];
+    _dst[4*i+1]=BASE64_TABLE[(s0&3)<<4|s1>>4];
+    _dst[4*i+2]=BASE64_TABLE[(s1&15)<<2|s2>>6];
     _dst[4*i+3]=BASE64_TABLE[s2&63];
   }
   _len-=3*i;
   if(_len==1){
     s0=_src[3*i+0];
     _dst[4*i+0]=BASE64_TABLE[s0>>2];
-    _dst[4*i+1]=BASE64_TABLE[s0&3<<4];
+    _dst[4*i+1]=BASE64_TABLE[(s0&3)<<4];
     _dst[4*i+2]='=';
     _dst[4*i+3]='=';
     i++;
@@ -2053,8 +2054,8 @@ static char *op_base64_encode(char *_dst,const char *_src,int _len){
     s0=_src[3*i+0];
     s1=_src[3*i+1];
     _dst[4*i+0]=BASE64_TABLE[s0>>2];
-    _dst[4*i+1]=BASE64_TABLE[s0&3<<4|s1>>4];
-    _dst[4*i+2]=BASE64_TABLE[s1&15<<2];
+    _dst[4*i+1]=BASE64_TABLE[(s0&3)<<4|s1>>4];
+    _dst[4*i+2]=BASE64_TABLE[(s1&15)<<2];
     _dst[4*i+3]='=';
     i++;
   }
@@ -3217,6 +3218,54 @@ void *op_url_stream_create(OpusFileCallbacks *_cb,
   void    *ret;
   va_start(ap,_url);
   ret=op_url_stream_vcreate(_cb,_url,ap);
+  va_end(ap);
+  return ret;
+}
+
+/*Convenience routines to open/test URLs in a single step.*/
+
+OggOpusFile *op_vopen_url(const char *_url,int *_error,va_list _ap){
+  OpusFileCallbacks  cb;
+  OggOpusFile       *of;
+  void              *source;
+  source=op_url_stream_vcreate(&cb,_url,_ap);
+  if(OP_UNLIKELY(source==NULL)){
+    if(_error!=NULL)*_error=OP_EFAULT;
+    return NULL;
+  }
+  of=op_open_callbacks(source,&cb,NULL,0,_error);
+  if(OP_UNLIKELY(of==NULL))(*cb.close)(source);
+  return of;
+}
+
+OggOpusFile *op_open_url(const char *_url,int *_error,...){
+  OggOpusFile *ret;
+  va_list      ap;
+  va_start(ap,_error);
+  ret=op_vopen_url(_url,_error,ap);
+  va_end(ap);
+  return ret;
+}
+
+OggOpusFile *op_vtest_url(const char *_url,int *_error,va_list _ap){
+  OpusFileCallbacks  cb;
+  OggOpusFile       *of;
+  void              *source;
+  source=op_url_stream_vcreate(&cb,_url,_ap);
+  if(OP_UNLIKELY(source==NULL)){
+    if(_error!=NULL)*_error=OP_EFAULT;
+    return NULL;
+  }
+  of=op_test_callbacks(source,&cb,NULL,0,_error);
+  if(OP_UNLIKELY(of==NULL))(*cb.close)(source);
+  return of;
+}
+
+OggOpusFile *op_test_url(const char *_url,int *_error,...){
+  OggOpusFile *ret;
+  va_list      ap;
+  va_start(ap,_error);
+  ret=op_vtest_url(_url,_error,ap);
   va_end(ap);
   return ret;
 }

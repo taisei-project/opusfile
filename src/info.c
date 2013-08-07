@@ -9,6 +9,10 @@
  * by the Xiph.Org Foundation and contributors http://www.xiph.org/ *
  *                                                                  *
  ********************************************************************/
+#ifdef HAVE_CONFIG_H
+#include "config.h"
+#endif
+
 #include "internal.h"
 #include <limits.h>
 #include <string.h>
@@ -190,11 +194,11 @@ static int op_tags_add_prepare(OpusTags *_tags){
   int   *comment_lengths;
   int    ncomments;
   ncomments=_tags->comments;
-  user_comments=_ogg_realloc(_tags->user_comments,
+  user_comments=(char **)_ogg_realloc(_tags->user_comments,
    sizeof(*_tags->user_comments)*(ncomments+2));
   if(OP_UNLIKELY(user_comments==NULL))return OP_EFAULT;
   _tags->user_comments=user_comments;
-  comment_lengths=_ogg_realloc(_tags->comment_lengths,
+  comment_lengths=(int *)_ogg_realloc(_tags->comment_lengths,
    sizeof(*_tags->comment_lengths)*(ncomments+2));
   if(OP_UNLIKELY(comment_lengths==NULL))return OP_EFAULT;
   _tags->comment_lengths=comment_lengths;
@@ -283,4 +287,42 @@ int opus_tags_query_count(const OpusTags *_tags,const char *_tag){
     if(!op_tagcompare(user_comments[ci],_tag,tag_len))found++;
   }
   return found;
+}
+
+int opus_tags_get_track_gain(const OpusTags *_tags,int *_gain_q8){
+  char **comments;
+  int   *comment_lengths;
+  int    ncomments;
+  int    ci;
+  comments=_tags->user_comments;
+  comment_lengths=_tags->comment_lengths;
+  ncomments=_tags->comments;
+  /*Look for the first valid R128_TRACK_GAIN tag and use that.*/
+  for(ci=0;ci<ncomments;ci++){
+    if(comment_lengths[ci]>16
+     &&op_strncasecmp(comments[ci],"R128_TRACK_GAIN=",16)==0){
+      char       *p;
+      opus_int32  gain_q8;
+      int         negative;
+      p=comments[ci]+16;
+      negative=0;
+      if(*p=='-'){
+        negative=-1;
+        p++;
+      }
+      else if(*p=='+')p++;
+      gain_q8=0;
+      while(*p>='0'&&*p<='9'){
+        gain_q8=10*gain_q8+*p-'0';
+        if(gain_q8>32767-negative)break;
+        p++;
+      }
+      /*This didn't look like a signed 16-bit decimal integer.
+        Not a valid R128_TRACK_GAIN tag.*/
+      if(*p!='\0')continue;
+      *_gain_q8=(int)(gain_q8+negative^negative);
+      return 0;
+    }
+  }
+  return OP_FALSE;
 }

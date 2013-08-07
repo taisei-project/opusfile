@@ -1,17 +1,29 @@
 # autoconf source script for generating configure
 
-AC_INIT([opusfile], m4_esyscmd([doc/git-version.sh]))
+dnl The package_version file will be automatically synced to the git revision
+dnl by the update_version script when configured in the repository, but will
+dnl remain constant in tarball releases unless it is manually edited.
+m4_define([CURRENT_VERSION],
+          m4_esyscmd([ ./update_version 2>/dev/null || true
+                       if test -e package_version; then
+                           . ./package_version
+                           printf "$PACKAGE_VERSION"
+                       else
+                           printf "unknown"
+                       fi ]))
+
+AC_INIT([opusfile],[CURRENT_VERSION],[opus@xiph.org])
+AC_CONFIG_SRCDIR([src/opusfile.c])
+AC_CONFIG_MACRO_DIR([m4])
 
 AC_USE_SYSTEM_EXTENSIONS
 AC_SYS_LARGEFILE
 
-AM_INIT_AUTOMAKE([1.11 foreign])
+AM_INIT_AUTOMAKE([1.11 foreign no-define])
 AM_MAINTAINER_MODE([enable])
 LT_INIT
 
 m4_ifdef([AM_SILENT_RULES], [AM_SILENT_RULES([yes])])
-
-AC_CONFIG_MACRO_DIR([m4])
 
 dnl Library versioning for libtool.
 dnl Please update these for releases.
@@ -42,17 +54,17 @@ case $host in
     #  affects header declarations, not linking (unless we actually use some
     #  XP-only functions).
     AC_DEFINE_UNQUOTED(_WIN32_WINNT,0x501,
-     [We need at least WindowsXP for getaddrinfo/freaddrinfo])
+     [We need at least WindowsXP for getaddrinfo/freeaddrinfo])
     host_mingw=true
     ;;
 esac
-AM_CONDITIONAL(OP_WIN32, test "x$host_mingw" = xtrue)
+AM_CONDITIONAL(OP_WIN32, test "$host_mingw" = "true")
 
 AC_ARG_ENABLE([assertions],
   AS_HELP_STRING([--enable-assertions], [Enable assertions in code]),,
   enable_assertions=no)
 
-AS_IF([test "x$enable_assertions" = "xyes"], [
+AS_IF([test "$enable_assertions" = "yes"], [
   AC_DEFINE([OP_ENABLE_ASSERTIONS], [1], [Enable assertions in code])
 ])
 
@@ -61,13 +73,13 @@ AC_ARG_ENABLE([http],
   enable_http=yes)
 
 AM_COND_IF(OP_WIN32,
-  AS_IF([test "x$enable_http" != "xno"],
+  AS_IF([test "$enable_http" != "no"],
     AC_CHECK_HEADER([winsock2.h],,
       AC_MSG_WARN([HTTP support requires a Winsock socket library.])
       enable_http=no
     )
   ),
-  AS_IF([test "x$enable_http" != "xno"],
+  AS_IF([test "$enable_http" != "no"],
     AC_CHECK_HEADER([sys/socket.h],,
       AC_MSG_WARN([HTTP support requires a POSIX socket library.])
       enable_http=no
@@ -75,14 +87,15 @@ AM_COND_IF(OP_WIN32,
   )
 )
 
-AS_IF([test "x$enable_http" != "xno"], [
+AS_IF([test "$enable_http" != "no"], [
    openssl="openssl"
    AC_DEFINE([OP_ENABLE_HTTP], [1], [Enable HTTP support])
+   PKG_CHECK_MODULES([URL_DEPS], [openssl])
 ])
-AM_CONDITIONAL(OP_ENABLE_HTTP, [test "x$enable_http" != "xno"])
-AC_SUBST(openssl)
+AM_CONDITIONAL(OP_ENABLE_HTTP, [test "$enable_http" != "no"])
+AC_SUBST([openssl])
 
-PKG_CHECK_MODULES([DEPS], [ogg >= 1.3 opus >= 1.0.1 ${openssl}])
+PKG_CHECK_MODULES([DEPS], [ogg >= 1.3 opus >= 1.0.1])
 
 AC_ARG_ENABLE([fixed-point],
   AS_HELP_STRING([--enable-fixed-point], [Enable fixed-point calculation]),,
@@ -91,23 +104,31 @@ AC_ARG_ENABLE([float],
   AS_HELP_STRING([--disable-float], [Disable floating-point API]),,
   enable_float=yes)
 
-AS_IF([test "x$enable_float" = "xno"],
+AS_IF([test "$enable_float" = "no"],
   [enable_fixed_point=yes
    AC_DEFINE([OP_DISABLE_FLOAT_API], [1], [Disable floating-point API])
   ]
 )
 
-AS_IF([test "x$enable_fixed_point" = "xyes"],
+AS_IF([test "$enable_fixed_point" = "yes"],
   [AC_DEFINE([OP_FIXED_POINT], [1], [Enable fixed-point calculation])],
   [dnl This only has to be tested for if float->fixed conversions are required
+   saved_LIBS="$LIBS"
    AC_SEARCH_LIBS([lrintf], [m], [
       AC_DEFINE([OP_HAVE_LRINTF], [1], [Enable use of lrintf function])
       lrintf_notice="
     Library for lrintf() ......... ${ac_cv_search_lrintf}"
    ])
+   LIBS="$saved_LIBS"
   ]
 )
-AC_SUBST(ac_cv_search_lrintf)
+
+AS_CASE(["$ac_cv_search_lrintf"],
+  ["no"],[],
+  ["none required"],[],
+  [lrintf_lib="$ac_cv_search_lrintf"])
+
+AC_SUBST([lrintf_lib])
 
 CC_ATTRIBUTE_VISIBILITY([default], [
   CC_FLAG_VISIBILITY([CFLAGS="${CFLAGS} -fvisibility=hidden"])
@@ -118,23 +139,29 @@ AC_ARG_ENABLE([doc],
   AS_HELP_STRING([--disable-doc], [Do not build API documentation]),,
   [enable_doc=yes]
 )
-AC_CHECK_PROG(HAVE_DOXYGEN, doxygen, yes, no)
-if test "$HAVE_DOXYGEN" != "yes" -o "$enable_doc" != "yes" ; then
-  HAVE_DOXYGEN="no"
-  enable_doc="no"
-fi
-AM_CONDITIONAL(HAVE_DOXYGEN, [test $HAVE_DOXYGEN = yes])
 
-AC_OUTPUT([
+AS_IF([test "$enable_doc" = "yes"], [
+  AC_CHECK_PROG([HAVE_DOXYGEN], [doxygen], [yes], [no])
+],[
+  HAVE_DOXYGEN=no
+])
+
+AM_CONDITIONAL([HAVE_DOXYGEN], [test "$HAVE_DOXYGEN" = "yes"])
+
+AC_CONFIG_FILES([
   Makefile
   opusfile.pc
+  opusurl.pc
   opusfile-uninstalled.pc
+  opusurl-uninstalled.pc
   doc/Doxyfile
 ])
+AC_CONFIG_HEADERS([config.h])
+AC_OUTPUT
 
 AC_MSG_NOTICE([
 ------------------------------------------------------------------------
-  $PACKAGE $VERSION: Automatic configuration OK.
+  $PACKAGE_NAME $PACKAGE_VERSION: Automatic configuration OK.
 
     Assertions ................... ${enable_assertions}
 
