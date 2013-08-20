@@ -30,11 +30,11 @@ examples_seeking_example_LDADD = libopusurl.la libopusfile.la
 
 if OP_WIN32
 if OP_ENABLE_HTTP
-libopusurl_la_SOURCES += src/wincerts.c
+libopusurl_la_SOURCES += src/wincerts.c src/winerrno.h
 libopusurl_la_LIBADD += -lws2_32 -lcrypt32
 endif
-examples_opusfile_example_SOURCES += examples/win32utf8.c
-examples_seeking_example_SOURCES += examples/win32utf8.c
+examples_opusfile_example_SOURCES += examples/win32utf8.c examples/win32utf8.h
+examples_seeking_example_SOURCES += examples/win32utf8.c examples/win32utf8.h
 endif
 
 pkgconfigdir = $(libdir)/pkgconfig
@@ -51,7 +51,14 @@ EXTRA_DIST = \
  doc/Doxyfile.in \
  doc/opus_logo.svg \
  doc/Makefile \
- unix/Makefile
+ unix/Makefile \
+ win32/VS2010/opusfile.sln \
+ win32/VS2010/opusfile.vcxproj \
+ win32/VS2010/opusfile.vcxproj.filters \
+ win32/VS2010/opusfile_example.vcxproj \
+ win32/VS2010/opusfile_example.vcxproj.filters \
+ win32/VS2010/seeking_example.vcxproj \
+ win32/VS2010/seeking_example.vcxproj.filters
 
 # Targets to build and install just the library without the docs
 opusfile install-opusfile: NO_DOXYGEN = 1
