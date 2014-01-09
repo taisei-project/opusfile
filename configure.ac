@@ -19,7 +19,7 @@ AC_CONFIG_MACRO_DIR([m4])
 AC_USE_SYSTEM_EXTENSIONS
 AC_SYS_LARGEFILE
 
-AM_INIT_AUTOMAKE([1.11 foreign no-define dist-zip])
+AM_INIT_AUTOMAKE([1.11 foreign no-define dist-zip subdir-objects])
 AM_MAINTAINER_MODE([enable])
 LT_INIT
 
@@ -33,9 +33,9 @@ dnl - interfaces added/removed/changed -> increment CURRENT, REVISION = 0
 dnl - interfaces added -> increment AGE
 dnl - interfaces removed -> AGE = 0
 
-OP_LT_CURRENT=2
+OP_LT_CURRENT=3
 OP_LT_REVISION=0
-OP_LT_AGE=2
+OP_LT_AGE=3
 
 AC_SUBST(OP_LT_CURRENT)
 AC_SUBST(OP_LT_REVISION)
